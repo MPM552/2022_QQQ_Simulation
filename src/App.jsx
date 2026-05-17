@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { MACRO_EVENTS_2022, EVENT_TYPES, SEVERITY_COLORS } from "./data/marketData";
-import { HOURLY_DATA } from "./data/hourlyData";
+import { HOURLY_DATA, MACRO_EVENTS_2022, EVENT_TYPES, SEVERITY_COLORS } from "./data/marketData";
 import CandlestickChart from "./components/CandlestickChart";
 import "./App.css";
 

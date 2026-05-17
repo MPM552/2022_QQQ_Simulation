@@ -1,301 +1,451 @@
-// QQQ 2022 — Full year daily closes, prices read directly from TradingView chart.
-// Y-axis gridlines at every $10 used as reference. Every trading day included.
-// Chart range: ~$255 (Oct low) to ~$399 (Jan 3 open).
+/**
+ * marketData.js — Single source of truth for QQQ 2022 simulator.
+ *
+ * Sections:
+ *   1. DAILY_CLOSES — every trading day, prices read directly from TradingView chart.
+ *      Y-axis gridlines at $10 intervals used as reference rulers.
+ *   2. Hourly bar generator — deterministic PRNG, tightly bounded noise.
+ *   3. MACRO_EVENTS_2022 — unchanged event catalogue.
+ *   4. Exports: HOURLY_DATA, MACRO_EVENTS_2022, EVENT_TYPES, SEVERITY_COLORS.
+ */
 
-export const QQQ_2022 = [
-  // ── JANUARY: Opens near ATH ~$399, sharp & relentless selloff all month ──
-  // Chart: rapid drop Jan 3→5, brief bounce Jan 11-13, then cascade to Jan 24 trough ~$320
-  { date: "2022-01-03", price: 398.00, volume: 52_000_000 },
-  { date: "2022-01-04", price: 392.00, volume: 64_000_000 },
-  { date: "2022-01-05", price: 381.00, volume: 80_000_000 }, // Fed minutes hawkish
-  { date: "2022-01-06", price: 375.00, volume: 70_000_000 },
-  { date: "2022-01-07", price: 372.00, volume: 65_000_000 },
-  { date: "2022-01-10", price: 368.00, volume: 60_000_000 },
-  { date: "2022-01-11", price: 374.00, volume: 58_000_000 }, // brief bounce
-  { date: "2022-01-12", price: 378.00, volume: 57_000_000 },
-  { date: "2022-01-13", price: 369.00, volume: 63_000_000 },
-  { date: "2022-01-14", price: 363.00, volume: 66_000_000 },
-  { date: "2022-01-18", price: 350.00, volume: 82_000_000 }, // MLK — accelerating drop
-  { date: "2022-01-19", price: 354.00, volume: 74_000_000 },
-  { date: "2022-01-20", price: 342.00, volume: 92_000_000 },
-  { date: "2022-01-21", price: 337.00, volume: 98_000_000 },
-  { date: "2022-01-24", price: 322.00, volume: 118_000_000 }, // trough — almost touches $320
-  { date: "2022-01-25", price: 340.00, volume: 100_000_000 }, // sharp intraday reversal
-  { date: "2022-01-26", price: 334.00, volume: 92_000_000 },
-  { date: "2022-01-27", price: 320.00, volume: 120_000_000 }, // FOMC — new low
-  { date: "2022-01-28", price: 332.00, volume: 110_000_000 }, // relief bounce end of week
+// ─────────────────────────────────────────────────────────────
+// 1. DAILY CLOSES
+//    Read from TradingView chart. Grid: $400 top → $250 bottom.
+//    Every horizontal gridline = $10. Prices rounded to nearest $1
+//    to reflect reading precision from chart image.
+// ─────────────────────────────────────────────────────────────
+const DAILY_CLOSES = [
+  // ── JANUARY ──────────────────────────────────────────────────────────────────
+  // Chart: Opens at ATH ~$398. Immediately sells off. Jan 24 trough hits $322
+  // (almost on the $320 gridline). Jan 27 FOMC day — new low $320. Closes Jan $332.
+  { date: "2022-01-03", close: 398, vol: 52 },
+  { date: "2022-01-04", close: 392, vol: 63 },
+  { date: "2022-01-05", close: 381, vol: 80 }, // Fed minutes hawkish shock
+  { date: "2022-01-06", close: 375, vol: 70 },
+  { date: "2022-01-07", close: 372, vol: 65 },
+  { date: "2022-01-10", close: 368, vol: 60 },
+  { date: "2022-01-11", close: 374, vol: 57 }, // brief 3-day bounce
+  { date: "2022-01-12", close: 378, vol: 56 },
+  { date: "2022-01-13", close: 369, vol: 63 },
+  { date: "2022-01-14", close: 363, vol: 66 },
+  { date: "2022-01-18", close: 350, vol: 84 }, // accelerating leg down
+  { date: "2022-01-19", close: 354, vol: 73 },
+  { date: "2022-01-20", close: 342, vol: 94 },
+  { date: "2022-01-21", close: 337, vol: 99 },
+  { date: "2022-01-24", close: 322, vol: 120 }, // trough — $322, nearly on $320 line
+  { date: "2022-01-25", close: 340, vol: 101 }, // violent intraday reversal
+  { date: "2022-01-26", close: 334, vol: 93 },
+  { date: "2022-01-27", close: 320, vol: 122 }, // FOMC — absolute Jan low
+  { date: "2022-01-28", close: 332, vol: 111 }, // end-of-month relief
 
-  // ── FEBRUARY: Bounce to ~$365, then Ukraine invasion crash ──
-  // Chart: Feb 2-9 recovery to ~$365 clearly visible, then fade, Ukraine Feb 24 gap-down
-  { date: "2022-02-01", price: 344.00, volume: 85_000_000 },
-  { date: "2022-02-02", price: 354.00, volume: 76_000_000 },
-  { date: "2022-02-03", price: 344.00, volume: 88_000_000 }, // NFP — selloff
-  { date: "2022-02-04", price: 347.00, volume: 80_000_000 },
-  { date: "2022-02-07", price: 353.00, volume: 70_000_000 },
-  { date: "2022-02-08", price: 356.00, volume: 67_000_000 },
-  { date: "2022-02-09", price: 363.00, volume: 64_000_000 }, // peak of Feb bounce
-  { date: "2022-02-10", price: 352.00, volume: 78_000_000 },
-  { date: "2022-02-11", price: 342.00, volume: 90_000_000 },
-  { date: "2022-02-14", price: 335.00, volume: 96_000_000 }, // Russia tensions rising
-  { date: "2022-02-15", price: 344.00, volume: 82_000_000 },
-  { date: "2022-02-16", price: 347.00, volume: 77_000_000 },
-  { date: "2022-02-17", price: 339.00, volume: 85_000_000 },
-  { date: "2022-02-18", price: 333.00, volume: 92_000_000 },
-  { date: "2022-02-22", price: 322.00, volume: 112_000_000 },
-  { date: "2022-02-23", price: 316.00, volume: 120_000_000 },
-  { date: "2022-02-24", price: 313.00, volume: 145_000_000 }, // Russia invades — gap down, closes off lows
-  { date: "2022-02-25", price: 325.00, volume: 125_000_000 }, // relief bounce
-  { date: "2022-02-28", price: 333.00, volume: 112_000_000 },
+  // ── FEBRUARY ─────────────────────────────────────────────────────────────────
+  // Chart: Recovers to ~$363 by Feb 9 (clearly between $360-$370 lines).
+  // Then fades. Ukraine invasion Feb 24 — gap-down candle, closes ~$313.
+  // Immediate relief bounce; Feb closes ~$333.
+  { date: "2022-02-01", close: 344, vol: 85 },
+  { date: "2022-02-02", close: 354, vol: 76 },
+  { date: "2022-02-03", close: 344, vol: 89 }, // NFP shock — selloff
+  { date: "2022-02-04", close: 347, vol: 80 },
+  { date: "2022-02-07", close: 353, vol: 70 },
+  { date: "2022-02-08", close: 356, vol: 67 },
+  { date: "2022-02-09", close: 363, vol: 64 }, // Feb bounce peak — $363
+  { date: "2022-02-10", close: 352, vol: 79 },
+  { date: "2022-02-11", close: 342, vol: 91 },
+  { date: "2022-02-14", close: 335, vol: 97 }, // Russia tensions escalating
+  { date: "2022-02-15", close: 344, vol: 82 },
+  { date: "2022-02-16", close: 347, vol: 77 },
+  { date: "2022-02-17", close: 339, vol: 86 },
+  { date: "2022-02-18", close: 333, vol: 93 },
+  { date: "2022-02-22", close: 322, vol: 114 },
+  { date: "2022-02-23", close: 316, vol: 122 },
+  { date: "2022-02-24", close: 313, vol: 148 }, // Russia invades — gap down, closes off lows
+  { date: "2022-02-25", close: 325, vol: 127 }, // relief bounce
+  { date: "2022-02-28", close: 333, vol: 113 },
 
-  // ── MARCH: Volatile, drops to ~$308, then big Fed-hike relief rally to ~$375 ──
-  // Chart: Mar 7-8 trough clearly ~$308 (between $300-$310), then V-shape recovery
-  { date: "2022-03-01", price: 327.00, volume: 98_000_000 },
-  { date: "2022-03-02", price: 335.00, volume: 90_000_000 },
-  { date: "2022-03-03", price: 330.00, volume: 86_000_000 },
-  { date: "2022-03-04", price: 322.00, volume: 94_000_000 },
-  { date: "2022-03-07", price: 311.00, volume: 115_000_000 },
-  { date: "2022-03-08", price: 307.00, volume: 122_000_000 }, // cycle low — just above $300 line
-  { date: "2022-03-09", price: 321.00, volume: 105_000_000 },
-  { date: "2022-03-10", price: 316.00, volume: 98_000_000 },
-  { date: "2022-03-11", price: 312.00, volume: 100_000_000 },
-  { date: "2022-03-14", price: 307.00, volume: 110_000_000 }, // retest lows
-  { date: "2022-03-15", price: 318.00, volume: 96_000_000 },
-  { date: "2022-03-16", price: 337.00, volume: 108_000_000 }, // Fed +25bps — big rally
-  { date: "2022-03-17", price: 344.00, volume: 90_000_000 },
-  { date: "2022-03-18", price: 350.00, volume: 84_000_000 },
-  { date: "2022-03-21", price: 355.00, volume: 78_000_000 },
-  { date: "2022-03-22", price: 360.00, volume: 74_000_000 },
-  { date: "2022-03-23", price: 362.00, volume: 72_000_000 },
-  { date: "2022-03-24", price: 366.00, volume: 70_000_000 },
-  { date: "2022-03-25", price: 370.00, volume: 68_000_000 },
-  { date: "2022-03-28", price: 375.00, volume: 65_000_000 },
-  { date: "2022-03-29", price: 378.00, volume: 63_000_000 }, // yield curve inverts — peak of rally
-  { date: "2022-03-30", price: 374.00, volume: 66_000_000 },
-  { date: "2022-03-31", price: 370.00, volume: 70_000_000 },
+  // ── MARCH ────────────────────────────────────────────────────────────────────
+  // Chart: Mar 7-8 make new cycle low — chart shows ~$307, just above $300 line.
+  // Fed +25bps Mar 16 — big green candle, launches V-shape recovery.
+  // Mar 29 yield-curve-inversion peak clearly at ~$378 (between $370-$380).
+  { date: "2022-03-01", close: 327, vol: 98 },
+  { date: "2022-03-02", close: 335, vol: 90 },
+  { date: "2022-03-03", close: 330, vol: 86 },
+  { date: "2022-03-04", close: 322, vol: 95 },
+  { date: "2022-03-07", close: 311, vol: 116 },
+  { date: "2022-03-08", close: 307, vol: 124 }, // Mar low — just above $300 gridline
+  { date: "2022-03-09", close: 321, vol: 106 },
+  { date: "2022-03-10", close: 316, vol: 99 },
+  { date: "2022-03-11", close: 312, vol: 101 },
+  { date: "2022-03-14", close: 307, vol: 111 }, // retest — same low
+  { date: "2022-03-15", close: 318, vol: 97 },
+  { date: "2022-03-16", close: 337, vol: 109 }, // Fed +25bps — large green candle
+  { date: "2022-03-17", close: 344, vol: 91 },
+  { date: "2022-03-18", close: 350, vol: 85 },
+  { date: "2022-03-21", close: 355, vol: 79 },
+  { date: "2022-03-22", close: 360, vol: 75 },
+  { date: "2022-03-23", close: 362, vol: 73 },
+  { date: "2022-03-24", close: 366, vol: 71 },
+  { date: "2022-03-25", close: 370, vol: 69 },
+  { date: "2022-03-28", close: 375, vol: 66 },
+  { date: "2022-03-29", close: 378, vol: 64 }, // yield curve inverts — rally peak
+  { date: "2022-03-30", close: 374, vol: 67 },
+  { date: "2022-03-31", close: 370, vol: 71 },
 
-  // ── APRIL: Slow rollover from $375, accelerating down. End Apr ~$300 ──
-  // Chart: Apr 4 local peak ~$373, then grinding lower. Big drops Apr 22, 26, 29
-  { date: "2022-04-01", price: 366.00, volume: 74_000_000 },
-  { date: "2022-04-04", price: 372.00, volume: 68_000_000 }, // local Apr peak
-  { date: "2022-04-05", price: 361.00, volume: 80_000_000 },
-  { date: "2022-04-06", price: 350.00, volume: 92_000_000 },
-  { date: "2022-04-07", price: 347.00, volume: 86_000_000 },
-  { date: "2022-04-08", price: 344.00, volume: 82_000_000 },
-  { date: "2022-04-11", price: 340.00, volume: 86_000_000 },
-  { date: "2022-04-12", price: 330.00, volume: 100_000_000 }, // CPI 8.5%
-  { date: "2022-04-13", price: 337.00, volume: 90_000_000 },
-  { date: "2022-04-14", price: 332.00, volume: 86_000_000 },
-  { date: "2022-04-18", price: 326.00, volume: 90_000_000 },
-  { date: "2022-04-19", price: 333.00, volume: 82_000_000 },
-  { date: "2022-04-20", price: 336.00, volume: 78_000_000 },
-  { date: "2022-04-21", price: 331.00, volume: 80_000_000 },
-  { date: "2022-04-22", price: 318.00, volume: 102_000_000 },
-  { date: "2022-04-25", price: 308.00, volume: 114_000_000 },
-  { date: "2022-04-26", price: 297.00, volume: 124_000_000 },
-  { date: "2022-04-27", price: 304.00, volume: 114_000_000 },
-  { date: "2022-04-28", price: 295.00, volume: 130_000_000 }, // AMZN earnings disaster
-  { date: "2022-04-29", price: 289.00, volume: 122_000_000 },
+  // ── APRIL ────────────────────────────────────────────────────────────────────
+  // Chart: Apr 4 local peak ~$372. Then slow grind lower accelerates.
+  // CPI 8.5% Apr 12 — chart shows clear down-candle, drops to ~$330.
+  // Late April waterfall: Apr 26 ~$297, AMZN disaster Apr 28 ~$295, Apr 29 ~$289.
+  { date: "2022-04-01", close: 366, vol: 75 },
+  { date: "2022-04-04", close: 372, vol: 69 }, // Apr local peak
+  { date: "2022-04-05", close: 361, vol: 81 },
+  { date: "2022-04-06", close: 350, vol: 93 },
+  { date: "2022-04-07", close: 347, vol: 87 },
+  { date: "2022-04-08", close: 344, vol: 83 },
+  { date: "2022-04-11", close: 340, vol: 87 },
+  { date: "2022-04-12", close: 330, vol: 101 }, // CPI 8.5% — 40yr high
+  { date: "2022-04-13", close: 337, vol: 91 },
+  { date: "2022-04-14", close: 332, vol: 87 },
+  { date: "2022-04-18", close: 326, vol: 91 },
+  { date: "2022-04-19", close: 333, vol: 83 },
+  { date: "2022-04-20", close: 336, vol: 79 },
+  { date: "2022-04-21", close: 331, vol: 81 },
+  { date: "2022-04-22", close: 318, vol: 103 },
+  { date: "2022-04-25", close: 308, vol: 115 },
+  { date: "2022-04-26", close: 297, vol: 125 },
+  { date: "2022-04-27", close: 304, vol: 115 },
+  { date: "2022-04-28", close: 295, vol: 131 }, // AMZN -14% earnings disaster
+  { date: "2022-04-29", close: 289, vol: 123 },
 
-  // ── MAY: Crash continues. May 4 dead-cat bounce to ~$316, then new lows ~$263 ──
-  // Chart: May 4 spike clearly visible ~$316, May 9 drops clearly to ~$270,
-  // May 12 trough ~$263 (just above $260 line), late May recovery to ~$293
-  { date: "2022-05-02", price: 292.00, volume: 115_000_000 },
-  { date: "2022-05-03", price: 296.00, volume: 108_000_000 },
-  { date: "2022-05-04", price: 315.00, volume: 128_000_000 }, // Fed +50bps — sharp spike
-  { date: "2022-05-05", price: 296.00, volume: 136_000_000 },
-  { date: "2022-05-06", price: 280.00, volume: 144_000_000 },
-  { date: "2022-05-09", price: 271.00, volume: 152_000_000 }, // bear market official
-  { date: "2022-05-10", price: 277.00, volume: 136_000_000 },
-  { date: "2022-05-11", price: 267.00, volume: 144_000_000 },
-  { date: "2022-05-12", price: 263.00, volume: 150_000_000 }, // May trough, ~$263
-  { date: "2022-05-13", price: 274.00, volume: 132_000_000 },
-  { date: "2022-05-16", price: 279.00, volume: 120_000_000 },
-  { date: "2022-05-17", price: 284.00, volume: 112_000_000 },
-  { date: "2022-05-18", price: 270.00, volume: 132_000_000 },
-  { date: "2022-05-19", price: 263.00, volume: 142_000_000 }, // retest lows
-  { date: "2022-05-20", price: 267.00, volume: 134_000_000 },
-  { date: "2022-05-23", price: 274.00, volume: 120_000_000 },
-  { date: "2022-05-24", price: 269.00, volume: 125_000_000 },
-  { date: "2022-05-25", price: 272.00, volume: 118_000_000 },
-  { date: "2022-05-26", price: 282.00, volume: 110_000_000 },
-  { date: "2022-05-27", price: 293.00, volume: 102_000_000 }, // end-of-May recovery
+  // ── MAY ──────────────────────────────────────────────────────────────────────
+  // Chart: May 4 Fed +50bps spike — clearly visible tall green candle to ~$315.
+  // May 9 bear market day — drops to ~$271. May 12 double-bottom with May 19 ~$263.
+  // End-of-May recovery to ~$293 (between $290-$300).
+  { date: "2022-05-02", close: 292, vol: 116 },
+  { date: "2022-05-03", close: 296, vol: 109 },
+  { date: "2022-05-04", close: 315, vol: 130 }, // Fed +50bps — spike candle
+  { date: "2022-05-05", close: 296, vol: 138 },
+  { date: "2022-05-06", close: 280, vol: 145 },
+  { date: "2022-05-09", close: 271, vol: 154 }, // bear market -30% YTD
+  { date: "2022-05-10", close: 277, vol: 137 },
+  { date: "2022-05-11", close: 267, vol: 145 },
+  { date: "2022-05-12", close: 263, vol: 151 }, // May trough
+  { date: "2022-05-13", close: 274, vol: 133 },
+  { date: "2022-05-16", close: 279, vol: 121 },
+  { date: "2022-05-17", close: 284, vol: 113 },
+  { date: "2022-05-18", close: 270, vol: 133 },
+  { date: "2022-05-19", close: 263, vol: 143 }, // retest lows
+  { date: "2022-05-20", close: 267, vol: 135 },
+  { date: "2022-05-23", close: 274, vol: 121 },
+  { date: "2022-05-24", close: 269, vol: 126 },
+  { date: "2022-05-25", close: 272, vol: 119 },
+  { date: "2022-05-26", close: 282, vol: 111 },
+  { date: "2022-05-27", close: 293, vol: 103 }, // end-of-May recovery
 
-  // ── JUNE: Bounce to ~$296, then CPI + Fed 75bps crush to ~$270 low ──
-  // Chart: early June ~$293-296, CPI Jun 10 drops to ~$272, then Jun 13-16
-  // cluster clearly at ~$269-271 (just above $270 gridline — not much lower)
-  { date: "2022-06-01", price: 288.00, volume: 98_000_000 },
-  { date: "2022-06-02", price: 294.00, volume: 92_000_000 },
-  { date: "2022-06-03", price: 290.00, volume: 96_000_000 },
-  { date: "2022-06-06", price: 294.00, volume: 90_000_000 },
-  { date: "2022-06-07", price: 296.00, volume: 87_000_000 }, // June peak
-  { date: "2022-06-08", price: 292.00, volume: 90_000_000 },
-  { date: "2022-06-09", price: 283.00, volume: 102_000_000 },
-  { date: "2022-06-10", price: 272.00, volume: 122_000_000 }, // CPI 8.6% shock
-  { date: "2022-06-13", price: 263.00, volume: 150_000_000 }, // gap down Monday
-  { date: "2022-06-14", price: 260.00, volume: 155_000_000 }, // intraday low ~$258, closes ~$260
-  { date: "2022-06-15", price: 265.00, volume: 144_000_000 },
-  { date: "2022-06-16", price: 262.00, volume: 152_000_000 }, // Fed +75bps
-  { date: "2022-06-17", price: 269.00, volume: 135_000_000 },
-  { date: "2022-06-21", price: 277.00, volume: 118_000_000 },
-  { date: "2022-06-22", price: 272.00, volume: 122_000_000 },
-  { date: "2022-06-23", price: 278.00, volume: 112_000_000 },
-  { date: "2022-06-24", price: 288.00, volume: 104_000_000 }, // opex — bounce
-  { date: "2022-06-27", price: 283.00, volume: 100_000_000 },
-  { date: "2022-06-28", price: 276.00, volume: 108_000_000 },
-  { date: "2022-06-29", price: 275.00, volume: 110_000_000 },
-  { date: "2022-06-30", price: 271.00, volume: 114_000_000 }, // Q2 close
+  // ── JUNE ─────────────────────────────────────────────────────────────────────
+  // Chart: Early June bounces to ~$296 (Jun 7). CPI 8.6% Jun 10 — drops to $272.
+  // Jun 13 Monday gap-down to ~$263. Jun 14 low ~$260 (on the $260 gridline).
+  // Fed +75bps Jun 16 — closes ~$262. Late June recovery to $288 (Jun 24 opex).
+  // Month-end Jun 30 ~$271.
+  { date: "2022-06-01", close: 288, vol: 99 },
+  { date: "2022-06-02", close: 294, vol: 93 },
+  { date: "2022-06-03", close: 290, vol: 97 },
+  { date: "2022-06-06", close: 294, vol: 91 },
+  { date: "2022-06-07", close: 296, vol: 88 }, // Jun peak
+  { date: "2022-06-08", close: 292, vol: 91 },
+  { date: "2022-06-09", close: 283, vol: 103 },
+  { date: "2022-06-10", close: 272, vol: 123 }, // CPI 8.6%
+  { date: "2022-06-13", close: 263, vol: 152 }, // Monday gap-down
+  { date: "2022-06-14", close: 260, vol: 157 }, // low — on the $260 line
+  { date: "2022-06-15", close: 265, vol: 146 },
+  { date: "2022-06-16", close: 262, vol: 154 }, // Fed +75bps — largest since 1994
+  { date: "2022-06-17", close: 269, vol: 136 },
+  { date: "2022-06-21", close: 277, vol: 119 },
+  { date: "2022-06-22", close: 272, vol: 123 },
+  { date: "2022-06-23", close: 278, vol: 113 },
+  { date: "2022-06-24", close: 288, vol: 105 }, // opex bounce
+  { date: "2022-06-27", close: 283, vol: 101 },
+  { date: "2022-06-28", close: 276, vol: 109 },
+  { date: "2022-06-29", close: 275, vol: 111 },
+  { date: "2022-06-30", close: 271, vol: 115 }, // Q2 close
 
-  // ── JULY: V-shape recovery. Jul 14 CPI 9.1% is actually a LOW, then strong rally ──
-  // Chart: Jul 14 trough clearly ~$268, then consistent rally to peak ~$333 by Jul 29
-  { date: "2022-07-01", price: 275.00, volume: 98_000_000 },
-  { date: "2022-07-05", price: 280.00, volume: 90_000_000 },
-  { date: "2022-07-06", price: 285.00, volume: 86_000_000 },
-  { date: "2022-07-07", price: 292.00, volume: 82_000_000 },
-  { date: "2022-07-08", price: 296.00, volume: 80_000_000 },
-  { date: "2022-07-11", price: 287.00, volume: 88_000_000 },
-  { date: "2022-07-12", price: 279.00, volume: 94_000_000 },
-  { date: "2022-07-13", price: 271.00, volume: 100_000_000 }, // CPI 9.1% — sells first
-  { date: "2022-07-14", price: 268.00, volume: 106_000_000 }, // Jul trough, clearly ~$268
-  { date: "2022-07-15", price: 277.00, volume: 96_000_000 },
-  { date: "2022-07-18", price: 286.00, volume: 90_000_000 },
-  { date: "2022-07-19", price: 298.00, volume: 84_000_000 },
-  { date: "2022-07-20", price: 305.00, volume: 80_000_000 },
-  { date: "2022-07-21", price: 309.00, volume: 77_000_000 },
-  { date: "2022-07-22", price: 314.00, volume: 74_000_000 },
-  { date: "2022-07-25", price: 310.00, volume: 77_000_000 },
-  { date: "2022-07-26", price: 302.00, volume: 82_000_000 },
-  { date: "2022-07-27", price: 318.00, volume: 108_000_000 }, // GDP pivot day — big green
-  { date: "2022-07-28", price: 324.00, volume: 100_000_000 },
-  { date: "2022-07-29", price: 331.00, volume: 92_000_000 },
+  // ── JULY ─────────────────────────────────────────────────────────────────────
+  // Chart: Chop early July ~$275-296. CPI 9.1% Jul 13 — sells then recovers.
+  // Jul 14 trough clearly at $268 (between $260-$270, closer to $270).
+  // Then strong uninterrupted rally. GDP pivot Jul 27 — huge green candle.
+  // Jul 29 closes ~$331 (between $330-$340).
+  { date: "2022-07-01", close: 275, vol: 98 },
+  { date: "2022-07-05", close: 280, vol: 90 },
+  { date: "2022-07-06", close: 285, vol: 86 },
+  { date: "2022-07-07", close: 292, vol: 82 },
+  { date: "2022-07-08", close: 296, vol: 80 },
+  { date: "2022-07-11", close: 287, vol: 88 },
+  { date: "2022-07-12", close: 279, vol: 94 },
+  { date: "2022-07-13", close: 271, vol: 101 }, // CPI 9.1% — sells off first
+  { date: "2022-07-14", close: 268, vol: 107 }, // Jul trough — $268
+  { date: "2022-07-15", close: 277, vol: 97 },
+  { date: "2022-07-18", close: 286, vol: 91 },
+  { date: "2022-07-19", close: 298, vol: 85 },
+  { date: "2022-07-20", close: 305, vol: 81 },
+  { date: "2022-07-21", close: 309, vol: 78 },
+  { date: "2022-07-22", close: 314, vol: 75 },
+  { date: "2022-07-25", close: 310, vol: 78 },
+  { date: "2022-07-26", close: 302, vol: 83 },
+  { date: "2022-07-27", close: 318, vol: 109 }, // GDP -0.9% — pivot hope, huge green
+  { date: "2022-07-28", close: 324, vol: 101 },
+  { date: "2022-07-29", close: 331, vol: 93 },
 
-  // ── AUGUST: Continues up to peak ~$348 (Aug 15-16), then rollover, Jackson Hole Aug 26 ──
-  // Chart: Aug peak clearly between $340-$350, chart shows ~$348 as the top.
-  // Jackson Hole drop — from ~$336 Aug 25 closes to ~$302 Aug 26
-  { date: "2022-08-01", price: 326.00, volume: 86_000_000 },
-  { date: "2022-08-02", price: 320.00, volume: 90_000_000 },
-  { date: "2022-08-03", price: 325.00, volume: 84_000_000 },
-  { date: "2022-08-04", price: 328.00, volume: 80_000_000 },
-  { date: "2022-08-05", price: 322.00, volume: 82_000_000 },
-  { date: "2022-08-08", price: 329.00, volume: 78_000_000 },
-  { date: "2022-08-09", price: 333.00, volume: 76_000_000 },
-  { date: "2022-08-10", price: 342.00, volume: 95_000_000 }, // CPI 8.5% — inflation peak hopes
-  { date: "2022-08-11", price: 346.00, volume: 88_000_000 },
-  { date: "2022-08-12", price: 349.00, volume: 82_000_000 },
-  { date: "2022-08-15", price: 347.00, volume: 80_000_000 }, // Aug peak ~$349
-  { date: "2022-08-16", price: 343.00, volume: 82_000_000 },
-  { date: "2022-08-17", price: 339.00, volume: 84_000_000 },
-  { date: "2022-08-18", price: 343.00, volume: 80_000_000 },
-  { date: "2022-08-19", price: 334.00, volume: 87_000_000 },
-  { date: "2022-08-22", price: 320.00, volume: 98_000_000 },
-  { date: "2022-08-23", price: 315.00, volume: 103_000_000 },
-  { date: "2022-08-24", price: 319.00, volume: 96_000_000 },
-  { date: "2022-08-25", price: 317.00, volume: 92_000_000 },
-  { date: "2022-08-26", price: 300.00, volume: 130_000_000 }, // Jackson Hole — -5.5%
-  { date: "2022-08-29", price: 295.00, volume: 112_000_000 },
-  { date: "2022-08-30", price: 288.00, volume: 116_000_000 },
-  { date: "2022-08-31", price: 283.00, volume: 120_000_000 },
+  // ── AUGUST ───────────────────────────────────────────────────────────────────
+  // Chart: Rally continues. CPI 8.5% Aug 10 — another gap up. Peak at ~$349 Aug 12
+  // (clearly between $340-$350, touching top of that band).
+  // Slow rollover Aug 15-25. Jackson Hole Aug 26 — massive red candle, closes $300
+  // (drops from ~$317 to $300, -5.5%, lands right on the $300 gridline).
+  // Aug 30-31 continues lower to ~$283.
+  { date: "2022-08-01", close: 326, vol: 87 },
+  { date: "2022-08-02", close: 320, vol: 91 },
+  { date: "2022-08-03", close: 325, vol: 85 },
+  { date: "2022-08-04", close: 328, vol: 81 },
+  { date: "2022-08-05", close: 322, vol: 83 },
+  { date: "2022-08-08", close: 329, vol: 79 },
+  { date: "2022-08-09", close: 333, vol: 77 },
+  { date: "2022-08-10", close: 342, vol: 96 }, // CPI 8.5% — peak inflation hopes
+  { date: "2022-08-11", close: 346, vol: 89 },
+  { date: "2022-08-12", close: 349, vol: 83 }, // Aug peak — $349
+  { date: "2022-08-15", close: 347, vol: 81 },
+  { date: "2022-08-16", close: 343, vol: 83 },
+  { date: "2022-08-17", close: 339, vol: 85 },
+  { date: "2022-08-18", close: 343, vol: 81 },
+  { date: "2022-08-19", close: 334, vol: 88 },
+  { date: "2022-08-22", close: 320, vol: 99 },
+  { date: "2022-08-23", close: 315, vol: 104 },
+  { date: "2022-08-24", close: 319, vol: 97 },
+  { date: "2022-08-25", close: 317, vol: 93 },
+  { date: "2022-08-26", close: 300, vol: 132 }, // Jackson Hole — lands on $300 line
+  { date: "2022-08-29", close: 295, vol: 114 },
+  { date: "2022-08-30", close: 288, vol: 118 },
+  { date: "2022-08-31", close: 283, vol: 122 },
 
-  // ── SEPTEMBER: Brief bounce to ~$296, CPI shock Sep 13, grind to yearly low ~$265 ──
-  // Chart: Sep 9 peak clearly ~$296, Sep 13 CPI crash clearly visible large red candle,
-  // Sep 26 is the absolute lowest point on the chart — reads ~$265
-  { date: "2022-09-01", price: 278.00, volume: 112_000_000 },
-  { date: "2022-09-02", price: 272.00, volume: 120_000_000 },
-  { date: "2022-09-06", price: 277.00, volume: 110_000_000 },
-  { date: "2022-09-07", price: 284.00, volume: 102_000_000 },
-  { date: "2022-09-08", price: 291.00, volume: 97_000_000 },
-  { date: "2022-09-09", price: 296.00, volume: 93_000_000 }, // Sep peak
-  { date: "2022-09-12", price: 292.00, volume: 96_000_000 },
-  { date: "2022-09-13", price: 268.00, volume: 142_000_000 }, // CPI 8.3% — -5.5% crash
-  { date: "2022-09-14", price: 275.00, volume: 125_000_000 },
-  { date: "2022-09-15", price: 270.00, volume: 130_000_000 },
-  { date: "2022-09-16", price: 264.00, volume: 136_000_000 },
-  { date: "2022-09-19", price: 267.00, volume: 122_000_000 },
-  { date: "2022-09-20", price: 260.00, volume: 132_000_000 },
-  { date: "2022-09-21", price: 256.00, volume: 140_000_000 }, // Fed +75bps 3rd
-  { date: "2022-09-22", price: 257.00, volume: 132_000_000 },
-  { date: "2022-09-23", price: 251.00, volume: 142_000_000 },
-  { date: "2022-09-26", price: 265.00, volume: 145_000_000 }, // yearly low — ~$265 (chart nadir)
-  { date: "2022-09-27", price: 254.00, volume: 133_000_000 },
-  { date: "2022-09-28", price: 264.00, volume: 123_000_000 },
-  { date: "2022-09-29", price: 258.00, volume: 128_000_000 },
-  { date: "2022-09-30", price: 254.00, volume: 135_000_000 }, // Q3 close
+  // ── SEPTEMBER ────────────────────────────────────────────────────────────────
+  // Chart: Brief bounce to $296 by Sep 9 (between $290-$300).
+  // CPI 8.3% Sep 13 — largest single down-candle visible on chart, drops to $268.
+  // Fed +75bps Sep 21 — $256. Sep 23 makes new low $251 (just above $250 line).
+  // Sep 26 chart shows a candle that wicks below then closes ~$254.
+  // Sep 30 Q3 close ~$254.
+  { date: "2022-09-01", close: 278, vol: 113 },
+  { date: "2022-09-02", close: 272, vol: 121 },
+  { date: "2022-09-06", close: 277, vol: 111 },
+  { date: "2022-09-07", close: 284, vol: 103 },
+  { date: "2022-09-08", close: 291, vol: 98 },
+  { date: "2022-09-09", close: 296, vol: 94 }, // Sep peak
+  { date: "2022-09-12", close: 292, vol: 97 },
+  { date: "2022-09-13", close: 268, vol: 144 }, // CPI 8.3% — massive -5.5% candle
+  { date: "2022-09-14", close: 275, vol: 127 },
+  { date: "2022-09-15", close: 270, vol: 132 },
+  { date: "2022-09-16", close: 264, vol: 138 },
+  { date: "2022-09-19", close: 267, vol: 124 },
+  { date: "2022-09-20", close: 260, vol: 134 },
+  { date: "2022-09-21", close: 256, vol: 142 }, // Fed +75bps 3rd
+  { date: "2022-09-22", close: 257, vol: 134 },
+  { date: "2022-09-23", close: 251, vol: 144 }, // near the year's absolute low
+  { date: "2022-09-26", close: 254, vol: 137 },
+  { date: "2022-09-27", close: 254, vol: 133 },
+  { date: "2022-09-28", close: 264, vol: 124 },
+  { date: "2022-09-29", close: 258, vol: 129 },
+  { date: "2022-09-30", close: 254, vol: 136 }, // Q3 close
 
-  // ── OCTOBER: Bottoming process. Oct 13 CPI epic reversal. Rally into month end ──
-  // Chart: Oct 13 — candle with long lower wick, closes ~$263. Oct 14 is yearly closing low ~$264.
-  // Rally from Oct 14 to Oct 28 peak — chart clearly shows ~$285 by month end
-  { date: "2022-10-03", price: 259.00, volume: 124_000_000 },
-  { date: "2022-10-04", price: 274.00, volume: 114_000_000 }, // surprise rally
-  { date: "2022-10-05", price: 269.00, volume: 120_000_000 },
-  { date: "2022-10-06", price: 265.00, volume: 124_000_000 },
-  { date: "2022-10-07", price: 255.00, volume: 136_000_000 }, // chip export ban
-  { date: "2022-10-10", price: 253.00, volume: 132_000_000 },
-  { date: "2022-10-11", price: 251.00, volume: 135_000_000 },
-  { date: "2022-10-12", price: 253.00, volume: 131_000_000 },
-  { date: "2022-10-13", price: 264.00, volume: 150_000_000 }, // CPI 8.2% — gap down, violent reversal
-  { date: "2022-10-14", price: 258.00, volume: 136_000_000 }, // closing low of the year
-  { date: "2022-10-17", price: 264.00, volume: 120_000_000 },
-  { date: "2022-10-18", price: 272.00, volume: 114_000_000 },
-  { date: "2022-10-19", price: 275.00, volume: 110_000_000 },
-  { date: "2022-10-20", price: 271.00, volume: 115_000_000 },
-  { date: "2022-10-21", price: 277.00, volume: 108_000_000 },
-  { date: "2022-10-24", price: 281.00, volume: 104_000_000 },
-  { date: "2022-10-25", price: 284.00, volume: 100_000_000 },
-  { date: "2022-10-26", price: 280.00, volume: 106_000_000 },
-  { date: "2022-10-27", price: 275.00, volume: 113_000_000 },
-  { date: "2022-10-28", price: 285.00, volume: 108_000_000 }, // Oct peak
-  { date: "2022-10-31", price: 280.00, volume: 113_000_000 },
+  // ── OCTOBER ──────────────────────────────────────────────────────────────────
+  // Chart: Oct 7 chip ban drops to ~$255. Oct 10-11 at $251-253 (yearly lows zone).
+  // Oct 13 CPI 8.2% epic reversal — opens low ~$252, closes $264.
+  // Oct 14 ~$258. Then steady rally. Oct 28 peak ~$285 (between $280-$290).
+  { date: "2022-10-03", close: 259, vol: 125 },
+  { date: "2022-10-04", close: 274, vol: 115 }, // surprise rally
+  { date: "2022-10-05", close: 269, vol: 121 },
+  { date: "2022-10-06", close: 265, vol: 125 },
+  { date: "2022-10-07", close: 255, vol: 138 }, // chip export ban
+  { date: "2022-10-10", close: 253, vol: 133 },
+  { date: "2022-10-11", close: 251, vol: 136 }, // yearly low — $251
+  { date: "2022-10-12", close: 253, vol: 132 },
+  { date: "2022-10-13", close: 264, vol: 152 }, // CPI 8.2% — epic gap-down-then-reversal
+  { date: "2022-10-14", close: 258, vol: 138 },
+  { date: "2022-10-17", close: 264, vol: 122 },
+  { date: "2022-10-18", close: 272, vol: 116 },
+  { date: "2022-10-19", close: 275, vol: 112 },
+  { date: "2022-10-20", close: 271, vol: 116 },
+  { date: "2022-10-21", close: 277, vol: 109 },
+  { date: "2022-10-24", close: 281, vol: 105 },
+  { date: "2022-10-25", close: 284, vol: 101 },
+  { date: "2022-10-26", close: 280, vol: 107 },
+  { date: "2022-10-27", close: 275, vol: 114 },
+  { date: "2022-10-28", close: 285, vol: 109 }, // Oct peak
+  { date: "2022-10-31", close: 280, vol: 114 },
 
-  // ── NOVEMBER: Nov 2 Fed selloff to ~$263, Nov 10 CPI 7.7% massive rally to ~$295 ──
-  // Chart: clear dip Nov 3 to ~$263, then Nov 10 largest single-day candle of year,
-  // closes ~$294. FTX Nov 11. Fades back to ~$278 by month end
-  { date: "2022-11-01", price: 273.00, volume: 118_000_000 },
-  { date: "2022-11-02", price: 265.00, volume: 128_000_000 }, // Fed +75bps 4th
-  { date: "2022-11-03", price: 262.00, volume: 125_000_000 },
-  { date: "2022-11-04", price: 271.00, volume: 115_000_000 },
-  { date: "2022-11-07", price: 275.00, volume: 108_000_000 },
-  { date: "2022-11-08", price: 273.00, volume: 112_000_000 },
-  { date: "2022-11-09", price: 261.00, volume: 130_000_000 }, // FTX starts collapsing
-  { date: "2022-11-10", price: 294.00, volume: 155_000_000 }, // CPI 7.7% — year's biggest rally
-  { date: "2022-11-11", price: 296.00, volume: 134_000_000 }, // FTX bankrupt — barely dents rally
-  { date: "2022-11-14", price: 291.00, volume: 115_000_000 },
-  { date: "2022-11-15", price: 288.00, volume: 110_000_000 },
-  { date: "2022-11-16", price: 282.00, volume: 115_000_000 },
-  { date: "2022-11-17", price: 278.00, volume: 119_000_000 },
-  { date: "2022-11-18", price: 274.00, volume: 115_000_000 },
-  { date: "2022-11-21", price: 270.00, volume: 122_000_000 },
-  { date: "2022-11-22", price: 277.00, volume: 113_000_000 },
-  { date: "2022-11-23", price: 284.00, volume: 106_000_000 },
-  { date: "2022-11-25", price: 285.00, volume: 76_000_000 }, // half day
-  { date: "2022-11-28", price: 279.00, volume: 111_000_000 },
-  { date: "2022-11-29", price: 275.00, volume: 115_000_000 },
-  { date: "2022-11-30", price: 285.00, volume: 108_000_000 },
+  // ── NOVEMBER ─────────────────────────────────────────────────────────────────
+  // Chart: Nov 3 drops to ~$262. Nov 10 CPI 7.7% — tallest candle of the year,
+  // closes $294 (between $290-$300). Nov 11 $296 (FTX barely matters).
+  // Then steady fade. Nov 30 recovery closes ~$285.
+  { date: "2022-11-01", close: 273, vol: 119 },
+  { date: "2022-11-02", close: 265, vol: 129 }, // Fed +75bps 4th
+  { date: "2022-11-03", close: 262, vol: 126 }, // Nov low
+  { date: "2022-11-04", close: 271, vol: 116 },
+  { date: "2022-11-07", close: 275, vol: 109 },
+  { date: "2022-11-08", close: 273, vol: 113 },
+  { date: "2022-11-09", close: 261, vol: 131 }, // FTX collapse starts
+  { date: "2022-11-10", close: 294, vol: 157 }, // CPI 7.7% — year's biggest rally
+  { date: "2022-11-11", close: 296, vol: 135 }, // FTX bankrupt — barely dents it
+  { date: "2022-11-14", close: 291, vol: 116 },
+  { date: "2022-11-15", close: 288, vol: 111 },
+  { date: "2022-11-16", close: 282, vol: 116 },
+  { date: "2022-11-17", close: 278, vol: 120 },
+  { date: "2022-11-18", close: 274, vol: 116 },
+  { date: "2022-11-21", close: 270, vol: 123 },
+  { date: "2022-11-22", close: 277, vol: 114 },
+  { date: "2022-11-23", close: 284, vol: 107 },
+  { date: "2022-11-25", close: 285, vol: 77 },  // half-day
+  { date: "2022-11-28", close: 279, vol: 112 },
+  { date: "2022-11-29", close: 275, vol: 116 },
+  { date: "2022-11-30", close: 285, vol: 109 },
 
-  // ── DECEMBER: Bounce to ~$291, then dot-plot shock Dec 13, BOJ Dec 22, close ~$261 ──
-  // Chart: Dec 1-2 near $289-291. Dec 13 brief spike to ~$283 then immediate rollover.
-  // Dec 20-22 cluster clearly around $258-262. Year-end close reads ~$261
-  { date: "2022-12-01", price: 290.00, volume: 100_000_000 },
-  { date: "2022-12-02", price: 288.00, volume: 103_000_000 },
-  { date: "2022-12-05", price: 281.00, volume: 111_000_000 },
-  { date: "2022-12-06", price: 274.00, volume: 118_000_000 },
-  { date: "2022-12-07", price: 270.00, volume: 123_000_000 },
-  { date: "2022-12-08", price: 274.00, volume: 115_000_000 },
-  { date: "2022-12-09", price: 270.00, volume: 119_000_000 },
-  { date: "2022-12-12", price: 275.00, volume: 113_000_000 },
-  { date: "2022-12-13", price: 282.00, volume: 123_000_000 }, // Fed +50bps — brief spike then reversal
-  { date: "2022-12-14", price: 276.00, volume: 118_000_000 },
-  { date: "2022-12-15", price: 264.00, volume: 132_000_000 },
-  { date: "2022-12-16", price: 259.00, volume: 138_000_000 },
-  { date: "2022-12-19", price: 255.00, volume: 131_000_000 },
-  { date: "2022-12-20", price: 251.00, volume: 135_000_000 },
-  { date: "2022-12-21", price: 259.00, volume: 122_000_000 },
-  { date: "2022-12-22", price: 254.00, volume: 128_000_000 }, // BOJ surprise
-  { date: "2022-12-23", price: 258.00, volume: 110_000_000 },
-  { date: "2022-12-27", price: 259.00, volume: 98_000_000 },
-  { date: "2022-12-28", price: 256.00, volume: 103_000_000 },
-  { date: "2022-12-29", price: 263.00, volume: 97_000_000 },
-  { date: "2022-12-30", price: 261.00, volume: 90_000_000 }, // year close
+  // ── DECEMBER ─────────────────────────────────────────────────────────────────
+  // Chart: Bounces to $290 Dec 1. Grinds lower Dec 5-12.
+  // Fed +50bps Dec 13 — brief spike to $282, then hard reversal. Dec 15 $264.
+  // Dec 16 $259. Dec 19-20 cluster at $255-251 (Dec 20 low ~$251).
+  // BOJ surprise Dec 22 — $254. Year-end close $261 (between $260-$270).
+  { date: "2022-12-01", close: 290, vol: 101 },
+  { date: "2022-12-02", close: 288, vol: 104 },
+  { date: "2022-12-05", close: 281, vol: 112 },
+  { date: "2022-12-06", close: 274, vol: 119 },
+  { date: "2022-12-07", close: 270, vol: 124 },
+  { date: "2022-12-08", close: 274, vol: 116 },
+  { date: "2022-12-09", close: 270, vol: 120 },
+  { date: "2022-12-12", close: 275, vol: 114 },
+  { date: "2022-12-13", close: 282, vol: 124 }, // Fed +50bps — spike then reversal
+  { date: "2022-12-14", close: 276, vol: 119 },
+  { date: "2022-12-15", close: 264, vol: 133 },
+  { date: "2022-12-16", close: 259, vol: 139 },
+  { date: "2022-12-19", close: 255, vol: 132 },
+  { date: "2022-12-20", close: 251, vol: 136 }, // Dec low
+  { date: "2022-12-21", close: 259, vol: 123 },
+  { date: "2022-12-22", close: 254, vol: 129 }, // BOJ yield curve surprise
+  { date: "2022-12-23", close: 258, vol: 111 },
+  { date: "2022-12-27", close: 259, vol: 99 },
+  { date: "2022-12-28", close: 256, vol: 104 },
+  { date: "2022-12-29", close: 263, vol: 98 },
+  { date: "2022-12-30", close: 261, vol: 91 },  // year close
 ];
 
+// ─────────────────────────────────────────────────────────────
+// 2. HOURLY BAR GENERATOR
+//    7 bars per day: 9:30 10:30 11:30 12:30 13:30 14:30 15:30
+//    Seeded PRNG → deterministic. Noise tightly bounded so no
+//    single bar diverges wildly from its daily anchor.
+// ─────────────────────────────────────────────────────────────
+const MARKET_HOURS = ["9:30", "10:30", "11:30", "12:30", "13:30", "14:30", "15:30"];
+
+// Intraday vol weights — open/close slightly busier, midday calmer
+const VOL_WEIGHTS = [1.15, 0.85, 0.70, 0.65, 0.70, 0.85, 1.10];
+
+// Mulberry32 seeded PRNG — fast, good distribution
+function makeRng(seed) {
+  let s = seed >>> 0;
+  return () => {
+    s += 0x6D2B79F5;
+    let t = Math.imul(s ^ (s >>> 15), 1 | s);
+    t ^= t + Math.imul(t ^ (t >>> 7), 61 | t);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+// Normal variate, hard-clamped to ±1.8σ — eliminates fat-tail spikes
+function randn(rng) {
+  const u = 1 - rng();
+  const v = rng();
+  const n = Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+  return Math.max(-1.8, Math.min(1.8, n));
+}
+
+function buildHourlyBars(date, prevClose, todayClose, events, rng) {
+  const totalMove = todayClose - prevClose;
+  const dayRange  = Math.abs(totalMove);
+
+  // Raw weighted random steps
+  const raw = VOL_WEIGHTS.map((w, i) => {
+    let v = randn(rng) * w;
+    // Gentle directional nudge at 10:30 bar on event days
+    if (events.length > 0 && i === 1) {
+      v += (events[0].impact === "BULLISH" ? 1 : -1) * w * 0.5;
+    }
+    return v;
+  });
+
+  // Scale so sum = totalMove
+  const rawSum = raw.reduce((a, b) => a + b, 0);
+  const scale  = Math.abs(rawSum) > 0.01 ? totalMove / rawSum : totalMove / raw.length;
+  let steps    = raw.map(r => r * scale);
+
+  // Hard cap: no single bar moves more than 35% of the daily range
+  const cap = Math.max(dayRange * 0.35, 0.40);
+  steps = steps.map(s => Math.max(-cap, Math.min(cap, s)));
+
+  // Re-normalise after clamping so path still anchors to close
+  const clampedSum = steps.reduce((a, b) => a + b, 0);
+  const drift = Math.abs(clampedSum) > 0.01 ? totalMove / clampedSum : 1;
+  steps = steps.map(s => s * drift);
+
+  // Build bars
+  const bars = [];
+  MARKET_HOURS.forEach((hour, i) => {
+    const open  = i === 0 ? prevClose : bars[i - 1].close;
+    const close = i === MARKET_HOURS.length - 1 ? todayClose : open + steps[i];
+    // Wick = small fraction of day range, never compounding
+    const wick  = Math.abs(randn(rng)) * Math.max(dayRange * 0.07, 0.08);
+    bars.push({
+      date,
+      hour,
+      key:      `${date} ${hour}`,
+      open:     +open.toFixed(2),
+      close:    +close.toFixed(2),
+      high:     +(Math.max(open, close) + wick).toFixed(2),
+      low:      +(Math.min(open, close) - wick).toFixed(2),
+      price:    +close.toFixed(2),
+      volume:   Math.floor((3_000_000 + rng() * 8_000_000)),
+      hasEvent: events.length > 0 && i === 1,
+      events:   i === 1 ? events : [],
+      isOpen:   i === 0,
+      isClose:  i === MARKET_HOURS.length - 1,
+    });
+  });
+  return bars;
+}
+
+// Build event lookup map
+const _eventMap = {};
+
+// Build full hourly dataset — called once at module load
+function buildAllHourlyBars(events) {
+  events.forEach(e => {
+    if (!_eventMap[e.date]) _eventMap[e.date] = [];
+    _eventMap[e.date].push(e);
+  });
+
+  const all = [];
+  for (let i = 0; i < DAILY_CLOSES.length; i++) {
+    const today     = DAILY_CLOSES[i];
+    const prev      = DAILY_CLOSES[i - 1];
+    const dayEvents = _eventMap[today.date] || [];
+
+    // Day 0: synthesise a realistic prior close slightly above open
+    const prevClose = prev ? prev.close : today.close + 1.5;
+
+    const seed = (today.date.replace(/-/g, "") | 0) + i * 997;
+    const rng  = makeRng(seed);
+
+    all.push(...buildHourlyBars(today.date, prevClose, today.close, dayEvents, rng));
+  }
+  return all;
+}
+
+// ─────────────────────────────────────────────────────────────
+// 3. MACRO EVENTS — preserved exactly as-is
+// ─────────────────────────────────────────────────────────────
 export const MACRO_EVENTS_2022 = [
   {
     date: "2022-01-05",
@@ -524,16 +674,22 @@ export const MACRO_EVENTS_2022 = [
   },
 ];
 
+// ─────────────────────────────────────────────────────────────
+// 4. EXPORTS
+// ─────────────────────────────────────────────────────────────
 export const EVENT_TYPES = {
-  FED: { color: "#f59e0b", label: "Fed Policy", icon: "🏦" },
-  MACRO: { color: "#3b82f6", label: "Macro Data", icon: "📊" },
-  EARNINGS: { color: "#8b5cf6", label: "Earnings", icon: "💰" },
-  GEOPOLITICAL: { color: "#ef4444", label: "Geopolitical", icon: "🌍" },
+  FED:         { color: "#f59e0b", label: "Fed Policy",   icon: "🏦" },
+  MACRO:       { color: "#3b82f6", label: "Macro Data",   icon: "📊" },
+  EARNINGS:    { color: "#8b5cf6", label: "Earnings",     icon: "💰" },
+  GEOPOLITICAL:{ color: "#ef4444", label: "Geopolitical", icon: "🌍" },
 };
 
 export const SEVERITY_COLORS = {
-  LOW: "#6b7280",
-  MEDIUM: "#f59e0b",
-  HIGH: "#f97316",
+  LOW:      "#6b7280",
+  MEDIUM:   "#f59e0b",
+  HIGH:     "#f97316",
   CRITICAL: "#ef4444",
 };
+
+// Built once at module load — ~1,680 hourly bars
+export const HOURLY_DATA = buildAllHourlyBars(MACRO_EVENTS_2022);

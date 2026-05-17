@@ -7,7 +7,6 @@ A day-accurate, interactive paper trading simulator for QQQ (Nasdaq-100 ETF) thr
 - 📈 **Real Price Data** — QQQ sampled across all of 2022, from the January peak ($400) to the December bottom ($260)
 - 📰 **25 Macro Events** — Fed rate hikes, CPI prints, geopolitical shocks, and landmark earnings
 - 🎮 **Paper Trading** — Buy/sell QQQ with $100K starting cash; track your P&L vs the index
-- ⚡ **Event Engine** — Sim pauses when a market-moving event hits; you decide how to react
 - 📊 **Alpha Tracking** — See if you can beat or outperform a buy-and-hold strategy
 - 🔍 **Nearby Events** — Always see what macro catalysts are approaching
 
